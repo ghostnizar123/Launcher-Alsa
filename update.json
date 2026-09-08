@@ -1,11 +1,10 @@
 {
-  "version": "1.0.0",
-  "download": "https://github.com/ghostnizar123/Launcher-Alsa/releases/download/v1.0.0/Launcher.exe",
-  "sha256": "00f10e32afcaf83eb94f035d13f3074debe98ff65a9ad5216859521c2f4dffd9",
+  "version": "1.0.1",
+  "download": "https://github.com/ghostnizar123/Launcher-Alsa/releases/download/v1.0.1/Launcher.exe",
+  "sha256": "9324eaff5c552084323e5803e2a41b54a86f5c618b7279905d091ae1ce6637b4",
   "changelog": [
-    "Initial launcher release",
-    "Online update system",
-    "Server status",
-    "Discord integration"
+    "Anti-decompile + Anti-crack protection",
+    "Anti-debug & integrity check",
+    "Performance LTCG/CFG"
   ]
 }
