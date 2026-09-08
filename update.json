@@ -1,8 +1,11 @@
 {
   "version": "1.0.0",
-  "download": "https://github.com/YOUR_USERNAME/YOUR_REPOSITORY/releases/download/v1.0.0/Launcher.exe",
-  "sha256": "REPLACE_WITH_SHA256_OF_Launcher.exe",
+  "download": "https://github.com/ghostnizar123/Launcher-Alsa/releases/download/v1.0.0/Launcher.exe",
+  "sha256": "00f10e32afcaf83eb94f035d13f3074debe98ff65a9ad5216859521c2f4dffd9",
   "changelog": [
-    "Initial public release"
+    "Initial launcher release",
+    "Online update system",
+    "Server status",
+    "Discord integration"
   ]
 }
