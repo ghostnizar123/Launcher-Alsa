@@ -1,0 +1,8 @@
+{
+  "version": "1.0.0",
+  "download": "https://github.com/YOUR_USERNAME/YOUR_REPOSITORY/releases/download/v1.0.0/Launcher.exe",
+  "sha256": "REPLACE_WITH_SHA256_OF_Launcher.exe",
+  "changelog": [
+    "Initial public release"
+  ]
+}
