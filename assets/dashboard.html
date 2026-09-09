@@ -431,41 +431,53 @@
     $('lastSha').textContent = fileSha ? String(fileSha).substring(0, 7) : '—';
   }
 
-  /* ---------- mutations ---------- */
+  /* ---------- mutations (every action AUTO-SAVES to bans.json) ---------- */
+  function hasPat() {
+    var c = api();
+    if (!c) return false;
+    return !!c.t;
+  }
+  function autosave() {
+    collectGlobal();
+    if (!hasPat()) { setDirty(true); setStatus('ADD PAT TO SAVE', 'dirty'); return; }
+    commit(false).then(function () { setBadge(); }).catch(function (e) {
+      note('Auto-save failed: ' + (e && e.message || e), false);
+    });
+  }
   function pushBan(id, reason) {
     id = String(id).trim(); if (!id) return;
     state.bans = state.bans || [];
     if (!state.bans.some(function (b) { return String((b && (b.id || b)) || '') === id; }))
       state.bans.push({ id: id, reason: reason || '', by: myUid || 'dashboard', at: new Date().toISOString().substring(0, 10) });
     removeWl(id, true);
-    setDirty(true);
+    autosave();
   }
   function removeBan(id) {
     id = String(id).trim();
     state.bans = (state.bans || []).filter(function (b) { return String((b && (b.id || b)) || '') !== id; });
-    setDirty(true);
+    autosave();
   }
   function addWl(id) {
     id = String(id).trim(); if (!id) return;
     state.whitelist = state.whitelist || [];
     if (!state.whitelist.some(function (w) { return String((w && (w.id || w)) || '') === id; })) state.whitelist.push(id);
-    setDirty(true);
+    autosave();
   }
   function removeWl(id, silent) {
     id = String(id).trim();
     state.whitelist = (state.whitelist || []).filter(function (w) { return String((w && (w.id || w)) || '') !== id; });
-    if (!silent) setDirty(true);
+    if (!silent) autosave();
   }
   function addHw(h) {
     h = String(h || '').trim().toLowerCase(); if (!h) return;
     state.hwid_bans = state.hwid_bans || [];
     if (!state.hwid_bans.some(function (x) { return String(x).toLowerCase() === h; })) state.hwid_bans.push(h);
-    setDirty(true);
+    autosave();
   }
   function removeHw(h) {
     h = String(h || '').trim();
     state.hwid_bans = (state.hwid_bans || []).filter(function (x) { return String(x) !== h; });
-    setDirty(true);
+    autosave();
   }
 
   /* ---------- load / save ---------- */
@@ -500,26 +512,32 @@
   }
 
   $('btnSave').onclick = save;
-  async function save() {
+  async function save() { autosave(); }
+  function commit(notify) {
     var c = api();
-    if (!c.t) { note('Enter the GitHub PAT to publish. (Owner check works without it.)', false); return; }
+    if (!c) return Promise.reject(new Error('Fill owner / repo / branch first.'));
+    if (!c.t) return Promise.reject(new Error('Enter the GitHub PAT to publish.'));
     collectGlobal();
-    note('Saving to GitHub...', true);
-    try {
-      var body = { message: 'Alsa dashboard: update members', content: b64encode(JSON.stringify(state, null, 2)), branch: c.b };
-      if (fileSha) body.sha = fileSha;
-      var r = await fetch('https://api.github.com/repos/' + c.o + '/' + c.r + '/contents/bans.json', {
-        method: 'PUT',
-        headers: { Authorization: 'Bearer ' + c.t, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (r.status === 409) throw new Error('sha conflict — reload first (another owner saved)');
-      if (!r.ok) throw new Error('GitHub error ' + r.status);
+    return (saveChain = saveChain.then(function () { return doCommit(c, notify); }));
+  }
+  var saveChain = Promise.resolve();
+  function doCommit(c, notify) {
+    return fetch('https://api.github.com/repos/' + c.o + '/' + c.r + '/contents/bans.json', {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + c.t, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'Alsa dashboard: update members', content: b64encode(JSON.stringify(state, null, 2)), branch: c.b, sha: fileSha || undefined })
+    }).then(async function (r) {
+      if (r.status === 409 || r.status === 422) throw new Error('sha conflict — reload first (another owner saved). Click LOAD then retry.');
+      if (!r.ok) {
+        var txt = ', status ' + r.status;
+        try { var j = await r.json(); if (j && j.message) txt += ': ' + j.message; } catch (_) {}
+        throw new Error('GitHub save failed' + txt);
+      }
       var j = await r.json();
       fileSha = (j.content && j.content.sha) || fileSha;
       setDirty(false); setStatus('OWNER · LIVE', 'owner');
-      note('Published ✓ sha ' + String(fileSha || '').substring(0, 7) + ' — launchers enforce it within ~45s.', true);
-    } catch (e) { note('Save failed: ' + (e && e.message || e) + ' — LOAD to refresh sha, then retry.', false); }
+      if (notify) note('Published ✓ sha ' + String(fileSha || '').substring(0, 7) + ' — launchers enforce it within ~45s.', true);
+    });
   }
 
   function collectGlobal() {
@@ -527,10 +545,15 @@
     state.maintenance = $('f_maint').checked;
     state.owners = $('f_owners').value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
   }
-  $('f_message').addEventListener('input', function () { setDirty(true); });
-  $('f_maint').addEventListener('change', function () { setDirty(true); });
-  $('f_owners').addEventListener('input', function () { setDirty(true); });
+  var saveTimer = null;
+  function autoSaveLater() { setDirty(true); if (saveTimer) clearTimeout(saveTimer); saveTimer = setTimeout(autosave, 700); }
+  $('f_message').addEventListener('input', autoSaveLater);
+  $('f_maint').addEventListener('change', autoSaveLater);
+  $('f_owners').addEventListener('input', autoSaveLater);
   $('search').addEventListener('input', render);
+  $('pat').addEventListener('change', function () {
+    try { localStorage.setItem('alsa_dash_pat', $('pat').value.trim()); } catch (_) {}
+  });
 
   /* ---------- add buttons ---------- */
   $('btnAddBan').onclick = function () {
@@ -538,13 +561,13 @@
     if (!/^\d{5,25}$/.test(id)) { note('Discord ID must be numeric (Discord → right click user → Copy ID).', false); return; }
     pushBan(id, $('n_reason').value.trim());
     $('n_id').value = ''; $('n_reason').value = '';
-    note('Ban staged. SAVE & PUBLISH → launchers see it in ~45s.', true); render();
+    note(hasPat() ? '✓ Banned & auto-published to bans.json (~45s).' : '⚠️ Enter your GitHub PAT first — this is never saved until you do.', hasPat()); render();
   };
   $('btnAddWl').onclick = function () {
     var id = $('n_id').value.trim();
     if (!/^\d{5,25}$/.test(id)) { note('Discord ID must be numeric.', false); return; }
     addWl(id); $('n_id').value = ''; $('n_reason').value = '';
-    note('Whitelist staged. SAVE & PUBLISH to apply.', true); render();
+    note(hasPat() ? '✓ Whitelisted & auto-published to bans.json (~45s).' : '⚠️ Enter your GitHub PAT first.', hasPat()); render();
   };
   $('btnAddHw').onclick = function () {
     var hw = $('n_hwid').value.trim();
@@ -553,7 +576,7 @@
     var id = $('n_id').value.trim();
     if (/^\d{5,25}$/.test(id)) pushBan(id, $('n_reason').value.trim() || 'HWID banned');
     $('n_id').value = ''; $('n_hwid').value = ''; $('n_reason').value = '';
-    note('HWID ban staged. SAVE & PUBLISH — blocks that PC everywhere.', true); render();
+    note(hasPat() ? '✓ HWID ban auto-published to bans.json (~45s).' : '⚠️ Enter your GitHub PAT first.', hasPat()); render();
   };
 
   /* ---------- batch ---------- */
@@ -565,21 +588,21 @@
     if (!ids.length && !$('batchIn').value.trim()) { note('Put one Discord ID per line first.', false); return; }
     ids.forEach(function (id) { pushBan(id, 'batch'); });
     $('batchIn').value = '';
-    note(ids.length + ' bans staged. SAVE & PUBLISH.', true); render();
+    note(hasPat() ? ids.length + ' bans auto-published ✓' : '⚠️ Enter your GitHub PAT first.', hasPat()); render();
   };
   $('btnBatchWl').onclick = function () {
     var ids = batchIds();
     if (!ids.length) { note('Put one Discord ID per line first.', false); return; }
     ids.forEach(function (id) { addWl(id); });
     $('batchIn').value = '';
-    note(ids.length + ' whitelists staged. SAVE & PUBLISH.', true); render();
+    note(hasPat() ? ids.length + ' whitelists auto-published ✓' : '⚠️ Enter your GitHub PAT first.', hasPat()); render();
   };
   $('btnBatchHw').onclick = function () {
     var lines = $('batchIn').value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
     if (!lines.length) { note('Put one HWID per line first.', false); return; }
     lines.forEach(function (h) { addHw(h); });
     $('batchIn').value = '';
-    note(lines.length + ' HWID bans staged. SAVE & PUBLISH.', true); render();
+    note(hasPat() ? lines.length + ' HWID bans auto-published ✓' : '⚠️ Enter your GitHub PAT first.', hasPat()); render();
   };
 
   /* ---------- restore PAT + auto-refresh ---------- */
