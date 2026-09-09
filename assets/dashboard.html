@@ -520,7 +520,7 @@
     var c = api(); if (!c) { note('Fill owner / repo / branch first.', false); return; }
     note('Loading from GitHub...', true);
     try {
-      var r = await fetch(ghApiUrl(true), { headers: c.t ? ghAuth(c.t) : { Accept: 'application/vnd.github+json' } });
+      var r = await fetch(ghApiUrl(true) + '&ts=' + new Date().getTime(), { headers: c.t ? ghAuth(c.t) : { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
       if (r.status === 404) {
         fileSha = null;
         state = { message: '', maintenance: false, owners: state.owners || [], whitelist: [], bans: [], hwid_bans: [] };
@@ -569,8 +569,8 @@
     }
 
     if ((r.status === 409 || r.status === 422) && attempt < 2) {
-      // stale sha → reload latest then retry automatically
-      var fresh = await fetch(ghApiUrl(true), { headers: ghAuth(c.t) });
+      // stale sha → reload latest (cache-busted) then retry automatically
+      var fresh = await fetch(ghApiUrl(true) + '&ts=' + new Date().getTime(), { headers: ghAuth(c.t), cache: 'no-store' });
       if (fresh.status === 404) { fileSha = null; return doCommit(c, notify, attempt + 1); }
       if (!fresh.ok) throw new Error('Refresh failed: ' + (await ghErr(fresh)));
       var fj = await fresh.json();
