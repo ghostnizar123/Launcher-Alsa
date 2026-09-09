@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Account linked</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; gap: 14px;
+    align-items: center; justify-content: center; text-align: center;
+    background: #07090e; color: #f8fafc; padding: 24px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+  }
+  .check {
+    width: 84px; height: 84px; border-radius: 50%;
+    background: rgba(16, 185, 129, 0.15);
+    border: 2px solid #10b981; color: #10b981;
+    font-size: 44px; line-height: 80px;
+  }
+  .check.err { background: rgba(239, 68, 68, 0.12); border-color: #ef4444; color: #ef4444; }
+  h1 { font-size: 26px; font-weight: 800; }
+  p { font-size: 14px; color: #94a3b8; max-width: 420px; line-height: 1.6; }
+  .spin {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 3px solid rgba(56, 189, 248, 0.15);
+    border-top-color: #38bdf8;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="spin" id="loader"></div>
+  <h1 id="title">Linking your account...</h1>
+  <p id="sub">Please wait while we confirm with Discord.</p>
+<script>
+(function () {
+  var title = document.getElementById('title');
+  var sub = document.getElementById('sub');
+  var loader = document.getElementById('loader');
+  function done(ok, heading, message) {
+    document.title = ok ? 'Account linked' : 'Link failed';
+    loader.outerHTML = '<div class="check' + (ok ? '' : ' err') + '">' + (ok ? '✔' : '✕') + '</div>';
+    title.textContent = heading;
+    sub.textContent = message;
+    setTimeout(function () { try { window.close(); } catch (_) {} }, 3000);
+  }
+  try {
+    var hash = window.location.hash || '';
+    if (!hash || hash.indexOf('access_token') < 0) {
+      var qs = new URLSearchParams(window.location.search);
+      if (qs.get('error')) {
+        done(false, 'Link cancelled.', 'You denied access. Close this tab and try again from the launcher.');
+        return;
+      }
+      done(false, 'Nothing to link.', 'Open this page from the launcher Link button, then authorize Discord.');
+      return;
+    }
+    var params = new URLSearchParams(hash.substring(1));
+    var token = params.get('access_token');
+    if (!token) {
+      done(false, 'Link failed.', 'No token received. Close this tab and try again.');
+      return;
+    }
+    fetch('https://discord.com/api/users/@me', { headers: { Authorization: 'Bearer ' + token } })
+      .then(function (r) { return r.json(); })
+      .then(function (u) {
+        if (!u || !u.id) {
+          done(false, 'Link failed.', 'Discord did not return your profile. Try again.');
+          return;
+        }
+        // Owner-dashboard relay: if the caller passed a return URL in `state`,
+        // bounce the token + user back to that page (e.g. the admin dashboard).
+        try {
+          var stateParam = params.get('state');
+          if (stateParam) {
+            var ret = new URL(stateParam);
+            ret.hash = 'access_token=' + encodeURIComponent(token) +
+                       '&uid=' + encodeURIComponent(u.id) +
+                       '&username=' + encodeURIComponent(u.username || '') +
+                       '&avatar=' + encodeURIComponent(u.avatar || '');
+            window.location.replace(ret.href);
+            return;
+          }
+        } catch (_) {}
+        try {
+          fetch('http://localhost:51337/link?id=' + u.id +
+            '&username=' + encodeURIComponent(u.username || '') +
+            '&avatar=' + encodeURIComponent(u.avatar || ''), { mode: 'no-cors' }).catch(function () {});
+        } catch (_) {}
+        done(true, 'Your account has been linked successfully.',
+          'You can close this tab and return to the launcher.');
+      })
+      .catch(function () {
+        done(false, 'Link failed.', 'Could not reach Discord. Check your connection and try again.');
+      });
+  } catch (_) {
+    done(false, 'Link failed.', 'Something went wrong. Close this tab and try again.');
+  }
+})();
+</script>
+</body>
+</html>
