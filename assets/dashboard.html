@@ -617,11 +617,27 @@
 
   /* ---------- LIVE Launchers (InfinityFree heartbeat API) ---------- */
   function apiBase() { return (state.api && state.api.trim()) || CONFIG.api || ''; }
+  // InfinityFree serves a JS "anti-bot" challenge page to automated clients.
+  // A hidden iframe is a real browser navigation, so the challenge runs itself
+  // and stores the __test cookie; our fetch (credentials: 'include') reuses it.
+  var livePrime; var liveT = 0;
+  function primeLive() {
+    var base = apiBase();
+    if (!base) return;
+    if (!livePrime) {
+      livePrime = document.createElement('iframe');
+      livePrime.style.display = 'none';
+      document.body.appendChild(livePrime);
+    }
+    try { livePrime.src = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'action=members'; } catch (_) {}
+  }
   function loadMembers() {
     var base = apiBase();
     if (!base) { $('liveCount').textContent = 'no API set'; return; }
+    primeLive();
+    if (++liveT % 12 === 0) { primeLive(); liveT = 0; }
     var url = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'action=members';
-    fetch(url, { cache: 'no-store' })
+    fetch(url, { cache: 'no-store', credentials: 'include' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (list) { if (Array.isArray(list)) renderLive(list); })
       .catch(function () {});
