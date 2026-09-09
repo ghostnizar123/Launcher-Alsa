@@ -133,6 +133,9 @@
       <div><label>Broadcast message (shown once in every launcher)</label><input type="text" id="f_message" placeholder="Welcome / event / announcement..."></div>
     </div>
     <div class="row">
+      <div><label>Heartbeat API (InfinityFree) — launchers register here automatically</label><input type="text" id="f_api" placeholder="https://yourname.infinityfreeapp.com/api/"></div>
+    </div>
+    <div class="row">
       <div style="flex:2"><label>Owners — Discord IDs with panel access (one per line)</label><textarea id="f_owners" placeholder="1508465645262606560"></textarea></div>
     </div>
     <div class="chk" style="margin-top:14px"><input type="checkbox" id="f_maint"> Maintenance mode — blocks CONNECT for everyone</div>
@@ -175,6 +178,17 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2>6 — LIVE Launchers <span class="hint" id="liveCount">—</span></h2>
+    <div class="sub">Launchers ping the InfinityFree API every 15s — anyone who ran the launcher appears here automatically. Online = pinged in the last 45s.</div>
+    <div style="overflow-x:auto; margin-top:10px">
+      <table>
+        <thead><tr><th>Name</th><th>Discord ID</th><th>HWID</th><th>Ver</th><th>Last ping</th><th>Status</th><th style="width:18%">Actions</th></tr></thead>
+        <tbody id="liveRows"><tr><td colspan="7" style="color:#64748b">Waiting for the API… (set the Heartbeat API in card 2, save, then open a launcher)</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -182,7 +196,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var msg = $('msg');
   var fileSha = null;
-  var state = { message: '', maintenance: false, owners: [], whitelist: [], bans: [], hwid_bans: [] };
+  var state = { message: '', maintenance: false, api: '', owners: [], whitelist: [], bans: [], hwid_bans: [] };
   var dirty = false;
   var unlocked = false;
   var myUid = '';      // verified owner's Discord ID (this session)
@@ -191,7 +205,7 @@
   // ---- CONFIG -----------------------------------------------------------
   // owners: default owner Discord IDs (bans.json "owners" field overrides this).
   // pin: optional local fallback PIN. Empty = disabled.
-  var CONFIG = { owners: ['1508465645262606560'], pin: '' };
+  var CONFIG = { owners: ['1508465645262606560'], pin: '', api: '' };
   // Discord app (same app the launcher uses). redirect_uri is the REGISTERED one.
   var DISCORD_CID = '1546872701258305576';
   var DISCORD_REDIRECT = 'https://tory-gold-e4aa5qbz.edgeone.dev/redirectpage.html';
@@ -386,6 +400,7 @@
     if (!dirty) {
       $('f_message').value = state.message || '';
       $('f_maint').checked = !!state.maintenance;
+      $('f_api').value = state.api || '';
       $('f_owners').value = (state.owners && state.owners.length ? state.owners : CONFIG.owners).join('\n');
     }
     var rows = buildRows();
@@ -523,7 +538,7 @@
       var r = await fetch(ghApiUrl(true) + '&ts=' + new Date().getTime(), { headers: c.t ? ghAuth(c.t) : { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
       if (r.status === 404) {
         fileSha = null;
-        state = { message: '', maintenance: false, owners: state.owners || [], whitelist: [], bans: [], hwid_bans: [] };
+        state = { message: '', maintenance: false, api: '', owners: state.owners || [], whitelist: [], bans: [], hwid_bans: [] };
         render(); note('No bans.json on this branch yet — SAVE will create it.', true); setDirty(false); return;
       }
       if (!r.ok) throw new Error(await ghErr(r));
@@ -533,6 +548,7 @@
       state = {
         message: data.message || '',
         maintenance: !!data.maintenance,
+        api: (typeof data.api === 'string') ? data.api : '',
         owners: Array.isArray(data.owners) ? data.owners.map(String) : [],
         whitelist: Array.isArray(data.whitelist) ? data.whitelist : [],
         bans: Array.isArray(data.bans) ? data.bans : [],
@@ -585,17 +601,66 @@
   function collectGlobal() {
     state.message = $('f_message').value;
     state.maintenance = $('f_maint').checked;
+    state.api = $('f_api').value.trim();
     state.owners = $('f_owners').value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
   }
   var saveTimer = null;
   function autoSaveLater() { setDirty(true); if (saveTimer) clearTimeout(saveTimer); saveTimer = setTimeout(autosave, 700); }
   $('f_message').addEventListener('input', autoSaveLater);
   $('f_maint').addEventListener('change', autoSaveLater);
+  $('f_api').addEventListener('input', autoSaveLater);
   $('f_owners').addEventListener('input', autoSaveLater);
   $('search').addEventListener('input', render);
   $('pat').addEventListener('change', function () {
     try { localStorage.setItem('alsa_dash_pat', $('pat').value.trim()); } catch (_) {}
   });
+
+  /* ---------- LIVE Launchers (InfinityFree heartbeat API) ---------- */
+  function apiBase() { return (state.api && state.api.trim()) || CONFIG.api || ''; }
+  function loadMembers() {
+    var base = apiBase();
+    if (!base) { $('liveCount').textContent = 'no API set'; return; }
+    var url = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'action=members';
+    fetch(url, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (list) { if (Array.isArray(list)) renderLive(list); })
+      .catch(function () {});
+  }
+  function liveDot(m) {
+    return m && m.online ? '<span class="chip wl">● ONLINE</span>' : '<span class="chip hw">● OFFLINE</span>';
+  }
+  function renderLive(list) {
+    var tb = $('liveRows'); tb.innerHTML = '';
+    $('liveCount').textContent = list.length + ' seen';
+    list.forEach(function (m) {
+      var id = (m && m.id) || '';
+      var hw = (m && m.hwid) || '';
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + esc(m && m.name ? m.name : '—') + '</td>' +
+        '<td><code>' + esc(id) + '</code></td>' +
+        '<td><code>' + esc(hw) + '</code></td>' +
+        '<td>' + esc(m && m.ver || '') + '</td>' +
+        '<td>' + esc(m && m.last || '') + '</td>' +
+        '<td>' + liveDot(m) + '</td><td class="actions"></td>';
+      var acts = tr.lastChild;
+      if (id) {
+        var b = document.createElement('button');
+        b.className = 'small bred';
+        b.textContent = '🚫 BAN';
+        b.onclick = function () {
+          $('n_id').value = id;
+          if (hw && hw.indexOf('hw:') !== 0) $('n_hwid').value = hw;
+          var why = prompt('Ban ' + id + '? Reason:', '');
+          if (why === null) return;
+          pushBan(id, why);
+          if (hw && hw.indexOf('hw:') !== 0) addHw(hw);
+          render();
+        };
+        acts.appendChild(b);
+      }
+      tb.appendChild(tr);
+    });
+  }
 
   /* ---------- add buttons ---------- */
   $('btnAddBan').onclick = function () {
@@ -654,6 +719,8 @@
     if (dirty) { setStatus('UNSAVED CHANGES', 'dirty'); return; }
     load();
   }, 20000);
+  loadMembers();
+  setInterval(function () { if (unlocked) loadMembers(); }, 15000);
 
   render();
 })();
