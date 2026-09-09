@@ -481,20 +481,44 @@
   }
 
   /* ---------- load / save ---------- */
+  function ghApiUrl(withRef) {
+    var c = api();
+    var enc = 'bans.json'.split('/').map(function (s) { return encodeURIComponent(s); }).join('/');
+    var u = 'https://api.github.com/repos/' + encodeURIComponent(c.o) + '/' + encodeURIComponent(c.r) + '/contents/' + enc;
+    if (withRef) u += '?ref=' + encodeURIComponent(c.b);
+    return u;
+  }
+  function ghAuth(t) { return { Authorization: 'Bearer ' + t, Accept: 'application/vnd.github+json' }; }
+  async function ghErr(r) {
+    var m = '';
+    try { var j = await r.json(); m = (j && j.message) || ''; } catch (_) {}
+    return m || ('HTTP ' + r.status);
+  }
+  function putOnce(c, withSha) {
+    var body = { message: 'Alsa dashboard: update members', content: b64encode(JSON.stringify(state, null, 2)), branch: c.b };
+    if (withSha && fileSha) body.sha = fileSha;
+    return fetch(ghApiUrl(false), { method: 'PUT', headers: ghAuth(c.t), body: JSON.stringify(body) });
+  }
+  function finalize(r, notify) {
+    return r.json().then(function (j) {
+      fileSha = (j.content && j.content.sha) || fileSha;
+      setDirty(false); setStatus('OWNER · LIVE', 'owner');
+      if (notify) note('Published ✓ sha ' + String(fileSha || '').substring(0, 7) + ' — launchers enforce it within ~45s.', true);
+    });
+  }
+
   $('btnLoad').onclick = load;
   async function load() {
-    var c = api(); if (!c) { note('LOGGED OWNER verified, but PAT (repo token) required to read bans.json', false); return; }
+    var c = api(); if (!c) { note('Fill owner / repo / branch first.', false); return; }
     note('Loading from GitHub...', true);
     try {
-      var r = await fetch('https://api.github.com/repos/' + c.o + '/' + c.r + '/contents/bans.json?ref=' + encodeURIComponent(c.b), {
-        headers: c.t ? { Authorization: 'Bearer ' + c.t, Accept: 'application/vnd.github+json' } : { Accept: 'application/vnd.github+json' }
-      });
+      var r = await fetch(ghApiUrl(true), { headers: c.t ? ghAuth(c.t) : { Accept: 'application/vnd.github+json' } });
       if (r.status === 404) {
         fileSha = null;
         state = { message: '', maintenance: false, owners: state.owners || [], whitelist: [], bans: [], hwid_bans: [] };
-        render(); note('No bans.json yet — add members and SAVE to create it. (owners stay fine)', true); setDirty(false); return;
+        render(); note('No bans.json on this branch yet — SAVE will create it.', true); setDirty(false); return;
       }
-      if (!r.ok) throw new Error('GitHub error ' + r.status);
+      if (!r.ok) throw new Error(await ghErr(r));
       var j = await r.json();
       fileSha = j.sha || null;
       var data = JSON.parse(b64decode(j.content || '{}'));
@@ -518,26 +542,35 @@
     if (!c) return Promise.reject(new Error('Fill owner / repo / branch first.'));
     if (!c.t) return Promise.reject(new Error('Enter the GitHub PAT to publish.'));
     collectGlobal();
-    return (saveChain = saveChain.then(function () { return doCommit(c, notify); }));
+    return (saveChain = saveChain.then(function () { return doCommit(c, notify, 0); }));
   }
   var saveChain = Promise.resolve();
-  function doCommit(c, notify) {
-    return fetch('https://api.github.com/repos/' + c.o + '/' + c.r + '/contents/bans.json', {
-      method: 'PUT',
-      headers: { Authorization: 'Bearer ' + c.t, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'Alsa dashboard: update members', content: b64encode(JSON.stringify(state, null, 2)), branch: c.b, sha: fileSha || undefined })
-    }).then(async function (r) {
-      if (r.status === 409 || r.status === 422) throw new Error('sha conflict — reload first (another owner saved). Click LOAD then retry.');
-      if (!r.ok) {
-        var txt = ', status ' + r.status;
-        try { var j = await r.json(); if (j && j.message) txt += ': ' + j.message; } catch (_) {}
-        throw new Error('GitHub save failed' + txt);
-      }
-      var j = await r.json();
-      fileSha = (j.content && j.content.sha) || fileSha;
-      setDirty(false); setStatus('OWNER · LIVE', 'owner');
-      if (notify) note('Published ✓ sha ' + String(fileSha || '').substring(0, 7) + ' — launchers enforce it within ~45s.', true);
-    });
+
+  async function doCommit(c, notify, attempt) {
+    var r = await putOnce(c, true);
+    if (r.ok) return finalize(r, notify);
+    var msg = await ghErr(r);
+
+    if (r.status === 404) {
+      // file not on this branch → SAVE creates it (no sha)
+      r = await putOnce(c, false);
+      if (r.ok) return finalize(r, notify);
+      msg = await ghErr(r);
+      throw new Error('Creating bans.json failed: ' + msg + ' — your PAT needs write (Contents) access to ' + c.o + '/' + c.r);
+    }
+
+    if ((r.status === 409 || r.status === 422) && attempt < 2) {
+      // stale sha → reload latest then retry automatically
+      var fresh = await fetch(ghApiUrl(true), { headers: ghAuth(c.t) });
+      if (fresh.status === 404) { fileSha = null; return doCommit(c, notify, attempt + 1); }
+      if (!fresh.ok) throw new Error('Refresh failed: ' + (await ghErr(fresh)));
+      var fj = await fresh.json();
+      fileSha = fj.sha || null;
+      return doCommit(c, notify, attempt + 1);
+    }
+
+    if (r.status === 401 || r.status === 403) throw new Error(msg + ' — check your GitHub PAT is valid and has write (Contents) permission.');
+    throw new Error(msg + ' — LOAD then retry.');
   }
 
   function collectGlobal() {
