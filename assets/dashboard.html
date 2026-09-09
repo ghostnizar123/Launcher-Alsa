@@ -494,6 +494,14 @@
     try { var j = await r.json(); m = (j && j.message) || ''; } catch (_) {}
     return m || ('HTTP ' + r.status);
   }
+  async function tokenInfo() {
+    try {
+      var c = api(); if (!c || !c.t) return '';
+      var r = await fetch('https://api.github.com/user', { headers: ghAuth(c.t) });
+      var j = await r.json();
+      return ' [logged-in-as=' + (j.login || '?') + ', scopes=' + (r.headers.get('x-oauth-scopes') || 'none') + ']';
+    } catch (_) { return ''; }
+  }
   function putOnce(c, withSha) {
     var body = { message: 'Alsa dashboard: update members', content: b64encode(JSON.stringify(state, null, 2)), branch: c.b };
     if (withSha && fileSha) body.sha = fileSha;
@@ -556,7 +564,8 @@
       r = await putOnce(c, false);
       if (r.ok) return finalize(r, notify);
       msg = await ghErr(r);
-      throw new Error('Creating bans.json failed: ' + msg + ' — your PAT needs write (Contents) access to ' + c.o + '/' + c.r);
+      var info = await tokenInfo();
+      throw new Error('Creating bans.json failed: ' + msg + info + ' — your PAT needs write (Contents) access to ' + c.o + '/' + c.r);
     }
 
     if ((r.status === 409 || r.status === 422) && attempt < 2) {
@@ -569,8 +578,8 @@
       return doCommit(c, notify, attempt + 1);
     }
 
-    if (r.status === 401 || r.status === 403) throw new Error(msg + ' — check your GitHub PAT is valid and has write (Contents) permission.');
-    throw new Error(msg + ' — LOAD then retry.');
+    if (r.status === 401 || r.status === 403) { msg = msg + await tokenInfo(); throw new Error(msg + ' — check your GitHub PAT is valid and has write (Contents) permission.'); }
+    throw new Error(msg + await tokenInfo() + ' — LOAD then retry.');
   }
 
   function collectGlobal() {
