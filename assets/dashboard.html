@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alsa Roleplay — Owner Dashboard</title>
+<style>
+  :root { --gold:#38bdf8; --orange:#ff7a00; --red:#ef4444; --green:#10b981; --muted:#94a3b8; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#07090e; color:#f8fafc; font-family:'Segoe UI', Arial, sans-serif; padding:24px 16px 80px; }
+  .wrap { max-width:1000px; margin:0 auto; display:flex; flex-direction:column; gap:16px; }
+  h1 { font-size:22px; font-weight:800; }
+  h1 span { color:var(--orange); }
+  .sub { color:var(--muted); font-size:12.5px; line-height:1.6; }
+  .card { background:rgba(15,20,31,0.7); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:16px 18px; }
+  .card h2 { font-size:13px; letter-spacing:1.5px; color:var(--gold); margin-bottom:12px; text-transform:uppercase; display:flex; align-items:center; gap:8px; justify-content:space-between; }
+  .card h2 .hint { font-size:10px; letter-spacing:0; color:var(--muted); text-transform:none; font-weight:600; }
+  label { display:block; font-size:11px; color:var(--muted); margin:10px 0 4px; font-weight:700; }
+  input[type=text], input[type=password], textarea {
+    width:100%; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1);
+    color:#fff; padding:9px 12px; border-radius:10px; font-size:12px; outline:none;
+  }
+  input:focus, textarea:focus { border-color:var(--gold); }
+  textarea { min-height:76px; resize:vertical; font-family:Consolas, monospace; font-size:11.5px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:140px; }
+  button {
+    background:linear-gradient(135deg, var(--orange), #e05f00); color:#fff; border:none;
+    padding:10px 18px; border-radius:10px; font-weight:800; font-size:11.5px;
+    letter-spacing:.5px; cursor:pointer; margin-top:10px;
+  }
+  button.ghost { background:rgba(255,255,255,0.08); color:#dbe4f0; }
+  button.small { padding:5px 10px; font-size:10.5px; border-radius:7px; margin-top:0; letter-spacing:.3px; }
+  button.bgreen { background:linear-gradient(135deg,#10b981,#0a8f6a); }
+  button.bred { background:linear-gradient(135deg,#ef4444,#c53030); }
+  button.bdiscord { background:linear-gradient(135deg,#5865F2,#4752C4); width:100%; padding:14px; font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; color:#64748b; padding:7px 8px; border-bottom:1px solid rgba(255,255,255,0.1); font-size:10.5px; letter-spacing:.8px; text-transform:uppercase; }
+  td { padding:7px 8px; border-bottom:1px solid rgba(255,255,255,0.05); word-break:break-all; vertical-align:middle; }
+  tr:hover td { background:rgba(56,189,248,0.04); }
+  .chip { display:inline-block; padding:2px 8px; border-radius:20px; font-size:9.5px; font-weight:800; letter-spacing:.5px; }
+  .chip.ban { background:rgba(239,68,68,0.18); color:#f87171; border:1px solid rgba(239,68,68,0.45); }
+  .chip.hw { background:rgba(148,163,184,0.15); color:#cbd5e1; border:1px solid rgba(148,163,184,0.35); }
+  .chip.wl { background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.45); }
+  .chip.owner { background:rgba(255,122,0,0.16); color:#fb923c; border:1px solid rgba(255,122,0,0.5); }
+  .actions { display:flex; gap:4px; flex-wrap:wrap; }
+  .msg { padding:10px 14px; border-radius:10px; font-size:12px; font-weight:700; display:none; }
+  .msg.ok { display:block; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.4); }
+  .msg.err { display:block; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); }
+  .chk { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:13px; font-weight:700; }
+  .chk input { width:18px; height:18px; accent-color:var(--orange); }
+  code { color:var(--orange); }
+  .stats { display:flex; gap:12px; flex-wrap:wrap; }
+  .stat { background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:10px 16px; flex:1; min-width:120px; text-align:center; }
+  .stat .n { font-size:22px; font-weight:900; color:var(--gold); }
+  .stat .t { font-size:10px; color:var(--muted); letter-spacing:.8px; text-transform:uppercase; margin-top:2px; }
+  .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .toolbar input { flex:1; min-width:160px; }
+  .badge { font-size:10px; padding:3px 9px; border-radius:20px; font-weight:800; }
+  .badge.live { background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.4); }
+  .badge.dirty { background:rgba(255,122,0,0.15); color:#fb923c; border:1px solid rgba(255,122,0,0.45); }
+  .badge.owner { background:rgba(255,122,0,0.2); color:#fb923c; border:1px solid rgba(255,122,0,0.6); }
+  .badge.locked { background:rgba(239,68,68,0.14); color:#f87171; border:1px solid rgba(239,68,68,0.4); }
+  .badge.offline { background:rgba(148,163,184,0.12); color:#94a3b8; border:1px solid rgba(148,163,184,0.3); }
+  #loginOverlay { position:fixed; inset:0; background:rgba(5,7,11,0.97); display:flex; align-items:center; justify-content:center; z-index:999; }
+  #loginOverlay.hidden { display:none; }
+  .loginBox { max-width:360px; width:90%; }
+  .loginBox h1 { margin-bottom:4px; }
+  .loginBox .sub { margin-bottom:6px; }
+  .divider { display:flex; align-items:center; gap:10px; color:#64748b; font-size:10px; margin:14px 0 2px; text-transform:uppercase; letter-spacing:1px; }
+  .divider::before, .divider::after { content:''; flex:1; height:1px; background:rgba(255,255,255,0.08); }
+  hr { border:none; border-top:1px solid rgba(255,255,255,0.08); margin:6px 0; }
+  .who { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN GATE (Discord ID owner check + optional PIN fallback) ===== -->
+<div id="loginOverlay">
+  <div class="card loginBox">
+    <h1>ALSA ROLEPLAY <span>OWNER</span></h1>
+    <div class="sub">Restricted panel. Sign in with <b>Discord</b> — access is granted only if your Discord ID is in the owners list.</div>
+    <button class="bdiscord" id="btnLoginDiscord">⚡ LOGIN WITH DISCORD</button>
+    <div class="divider">or owner PIN</div>
+    <label>Owner PIN (if set by admin)</label>
+    <input type="password" id="pinInput" placeholder="••••••">
+    <button id="btnPin" style="width:100%">UNLOCK WITH PIN</button>
+    <div class="msg" id="loginMsg" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<div class="wrap" id="app">
+
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap">
+    <div>
+      <h1>ALSA ROLEPLAY <span>ADMIN CONSOLE</span></h1>
+      <div class="sub">Full control over launcher members — bans apply to every connected launcher <b>within ~45 seconds</b>, live while they play.</div>
+      <div class="sub who" id="whoLine" style="margin-top:6px"></div>
+    </div>
+    <span class="badge locked" id="statusBadge">LOCKED</span>
+  </div>
+
+  <div class="card">
+    <div class="stats">
+      <div class="stat"><div class="n" id="sBans">—</div><div class="t">Bans</div></div>
+      <div class="stat"><div class="n" id="sHw">—</div><div class="t">HWID Bans</div></div>
+      <div class="stat"><div class="n" id="sWl">—</div><div class="t">Whitelisted</div></div>
+      <div class="stat"><div class="n" id="sTotal">—</div><div class="t">Tracked</div></div>
+    </div>
+  </div>
+
+  <div class="msg" id="msg"></div>
+
+  <div class="card">
+    <h2>1 — Connection <span class="hint">GitHub = source of truth (bans.json)</span></h2>
+    <div class="row">
+      <div><label>Owner</label><input type="text" id="owner" value="ghostnizar123"></div>
+      <div><label>Repo</label><input type="text" id="repo" value="Launcher-Alsa"></div>
+      <div><label>Branch</label><input type="text" id="branch" value="main"></div>
+    </div>
+    <label>GitHub PAT (classic <code>repo</code>, or fine-grained Contents Read+Write — needed only to SAVE)</label>
+    <input type="password" id="pat" placeholder="ghp_... or github_pat_...">
+    <div class="row">
+      <div><button class="ghost" id="btnLoad" style="width:100%">⟳ LOAD / REFRESH</button></div>
+      <div><button id="btnSave" style="width:100%">💾 SAVE & PUBLISH TO GITHUB</button></div>
+    </div>
+    <div class="sub" style="margin-top:8px">Propagation: launchers re-check every <b>30–45s</b> and force-check on CONNECT. Last commit: <code id="lastSha">—</code></div>
+  </div>
+
+  <div class="card">
+    <h2>2 — Global controls <span class="hint">affects all launchers</span></h2>
+    <div class="row">
+      <div><label>Broadcast message (shown once in every launcher)</label><input type="text" id="f_message" placeholder="Welcome / event / announcement..."></div>
+    </div>
+    <div class="row">
+      <div style="flex:2"><label>Owners — Discord IDs with panel access (one per line)</label><textarea id="f_owners" placeholder="1508465645262606560"></textarea></div>
+    </div>
+    <div class="chk" style="margin-top:14px"><input type="checkbox" id="f_maint"> Maintenance mode — blocks CONNECT for everyone</div>
+  </div>
+
+  <div class="card">
+    <h2>3 — Add / edit member <span class="hint">Discord ID = bans their Discord link · HWID = bans their whole PC</span></h2>
+    <div class="row">
+      <div style="flex:2"><label>Discord ID</label><input type="text" id="n_id" placeholder="123456789012345678"></div>
+      <div style="flex:2"><label>HWID (optional, for HWID ban)</label><input type="text" id="n_hwid" placeholder="hwid-xxxx (from Settings → COPY HWID)"></div>
+      <div style="flex:2"><label>Reason / note</label><input type="text" id="n_reason" placeholder="Cheating / DM / MG..."></div>
+    </div>
+    <div class="row">
+      <div><button class="bred" id="btnAddBan" style="width:100%">🚫 BAN</button></div>
+      <div><button class="bgreen" id="btnAddWl" style="width:100%">✓ WHITELIST</button></div>
+      <div><button id="btnAddHw" style="width:100%">💻 HWID BAN</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>4 — Batch import <span class="hint">one Discord ID per line</span></h2>
+    <textarea id="batchIn" placeholder="123456789012345678&#10;987654321098765432"></textarea>
+    <div class="row">
+      <div><button class="bred" id="btnBatchBan" style="width:100%">BAN ALL LISTED</button></div>
+      <div><button class="bgreen" id="btnBatchWl" style="width:100%">WHITELIST ALL</button></div>
+      <div><button class="ghost" id="btnBatchHw" style="width:100%">HWID-BAN ALL</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>5 — Members <span class="hint" id="memberCount">—</span></h2>
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="🔍  Search ID / HWID / reason...">
+    </div>
+    <div style="overflow-x:auto; margin-top:10px">
+      <table>
+        <thead><tr><th style="width:28%">ID / HWID</th><th>Status</th><th style="width:18%">Reason</th><th style="width:36%">Actions</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="4" style="color:#64748b">No members loaded yet. Enter token and press LOAD.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var msg = $('msg');
+  var fileSha = null;
+  var state = { message: '', maintenance: false, owners: [], whitelist: [], bans: [], hwid_bans: [] };
+  var dirty = false;
+  var unlocked = false;
+  var myUid = '';      // verified owner's Discord ID (this session)
+  var myName = '';     // verified owner's Discord username
+
+  // ---- CONFIG -----------------------------------------------------------
+  // owners: default owner Discord IDs (bans.json "owners" field overrides this).
+  // pin: optional local fallback PIN. Empty = disabled.
+  var CONFIG = { owners: ['1508465645262606560'], pin: '' };
+  // Discord app (same app the launcher uses). redirect_uri is the REGISTERED one.
+  var DISCORD_CID = '1546872701258305576';
+  var DISCORD_REDIRECT = 'https://tory-gold-e4aa5qbz.edgeone.dev/redirectpage.html';
+
+  function ownerList() {
+    var o = [];
+    CONFIG.owners.forEach(function (x) { o.push(String(x)); });
+    if (Array.isArray(state.owners)) state.owners.forEach(function (x) { o.push(String(x)); });
+    // dedupe, keep order
+    return o.filter(function (v, i, a) { return a.indexOf(v) === i; });
+  }
+  function isOwner(uid) { return !!(uid && ownerList().indexOf(String(uid)) !== -1); }
+
+  /* ---------- login gate ---------- */
+  function lock() {
+    unlocked = false;
+    $('loginOverlay').classList.remove('hidden');
+    $('app').style.display = 'none';
+    setStatus('LOCKED', 'locked');
+  }
+  function unlock(uid, username) {
+    unlocked = true;
+    myUid = String(uid || myUid || '');
+    myName = String(username || myName || '');
+    try { localStorage.setItem('alsa_dash_ok', myUid); } catch (_) {}
+    if (myName) { try { localStorage.setItem('alsa_dash_user', myName); } catch (_) {} }
+    $('loginOverlay').classList.add('hidden');
+    $('app').style.display = '';
+    $('whoLine').innerHTML = '<b style="color:#fb923c">OWNER:</b> ' + esc(myName ? myName + ' · ' : '') + '<code>' + esc(myUid || '?') + '</code>' +
+      ' <button class="small ghost" id="btnLogout" style="margin-top:0">LOGOUT</button>';
+    var lo = $('btnLogout'); if (lo) lo.onclick = function () { logout(); };
+    setStatus('OWNER', 'owner');
+    if ($('loginMsg')) { $('loginMsg').className = 'msg'; $('loginMsg').textContent = ''; }
+  }
+  function logout() {
+    try { localStorage.removeItem('alsa_dash_ok'); localStorage.removeItem('alsa_dash_user'); } catch (_) {}
+    lock();
+  }
+  function setStatus(text, cls) {
+    var b = $('statusBadge');
+    b.textContent = text; b.className = 'badge ' + (cls || 'offline');
+  }
+  function setBadge() {
+    if (!unlocked) return setStatus('LOCKED', 'locked');
+    setStatus(dirty ? 'UNSAVED CHANGES' : 'OWNER · LIVE', dirty ? 'dirty' : 'owner');
+  }
+
+  /* ---------- Discord OAuth (implicit, state relay via redirectpage) ---------- */
+  $('btnLoginDiscord').onclick = function () {
+    var p = $('loginMsg'); p.className = 'msg'; p.textContent = '';
+    if (location.protocol === 'file:') {
+      p.className = 'msg err'; p.textContent = 'Discord login needs the dashboard to be HOSTED (e.g. GitHub Pages). File:// can use the owner PIN instead.';
+      return;
+    }
+    var returnTo = location.href.split('#')[0];
+    var url = 'https://discord.com/oauth2/authorize?client_id=' + DISCORD_CID +
+      '&response_type=token&redirect_uri=' + encodeURIComponent(DISCORD_REDIRECT) +
+      '&scope=identify&prompt=consent&state=' + encodeURIComponent(returnTo);
+    try { localStorage.removeItem('discord_oauth_ts'); } catch (_) {}
+    window.location.href = url; // full navigation -> back to this page with #access_token&uid
+  };
+  $('btnPin').onclick = function () {
+    var p = $('loginMsg'); p.className = 'msg'; p.textContent = '';
+    if (CONFIG.pin && $('pinInput').value === CONFIG.pin) { unlock('pin'); return; }
+    p.className = 'msg err'; p.textContent = CONFIG.pin ? 'Wrong PIN.' : 'No PIN is configured. Use LOGIN WITH DISCORD.';
+  };
+  $('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('btnPin').click(); });
+
+  /* ---------- process OAuth return (this page loads with #access_token&uid) ---------- */
+  (function handleOAuthReturn() {
+    try {
+      var h = window.location.hash;
+      if (!h || h.indexOf('uid=') < 0) return;
+      var pr = new URLSearchParams(h.substring(1));
+      var uid = pr.get('uid');
+      var uname = pr.get('username') || '';
+      if (uid) {
+        try { localStorage.setItem('alsa_dash_uid', uid); } catch (_) {}
+        try { if (uname) localStorage.setItem('alsa_dash_user', uname); } catch (_) {}
+        history.replaceState(null, '', location.pathname + location.search);
+        finishOwnerCheck(uid, uname);
+      }
+    } catch (e) {}
+  })();
+  function finishOwnerCheck(uid, uname) {
+    var p = $('loginMsg'); p.className = 'msg'; p.textContent = '';
+    // load owners (read-only, no PAT needed) then validate
+    loadOwners().then(function () {
+      if (isOwner(uid)) {
+        unlock(uid, uname || loadString('alsa_dash_user'));
+        autoLoad();
+      }
+      else {
+        p.className = 'msg err';
+        p.textContent = 'ACCESS DENIED — Discord ID ' + uid + ' is not in the owners list.';
+        setStatus('DENIED', 'locked');
+      }
+    }).catch(function () {
+      if (isOwner(uid)) { unlock(uid, uname); }
+      else { p.className = 'msg err'; p.textContent = 'Could not verify owners list — is your git repo/network ok?'; }
+    });
+  }
+  function loadString(k) { try { return localStorage.getItem(k) || ''; } catch (_) { return ''; } }
+
+  function autoLoad() {
+    if (loadString('alsa_dash_pat') && !fileSha) { setTimeout(load, 250); }
+  }
+
+  /* ---------- owners list read (no auth, raw file) ---------- */
+  function loadOwners() {
+    return fetch('https://raw.githubusercontent.com/' + $('owner').value.trim() + '/' + $('repo').value.trim() + '/' + ($('branch').value.trim() || 'main') + '/bans.json')
+      .then(function (r) { return r.ok ? r.json() : (function (e) { throw e; })(new Error('http ' + r.status)); })
+      .then(function (j) { if (j && Array.isArray(j.owners)) { state.owners = j.owners.map(String); } });
+  }
+
+  /* ---------- initial unlock decision ---------- */
+  (function boot() {
+    var okUid = '';
+    try { okUid = localStorage.getItem('alsa_dash_ok') || ''; } catch (_) {}
+    var user = '';
+    try { user = localStorage.getItem('alsa_dash_user') || ''; } catch (_) {}
+    if (okUid && CONFIG.owners.map(String).indexOf(okUid) !== -1) {
+      unlock(okUid, user);
+      autoLoad();
+    } else {
+      lock();
+      // silently refresh owners so the Discord check is accurate
+      loadOwners().catch(function () {});
+    }
+  })();
+
+  /* ---------- ui helpers ---------- */
+  function note(t, ok) { msg.textContent = t; msg.className = 'msg ' + (ok ? 'ok' : 'err'); }
+  function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function api() {
+    var o = $('owner').value.trim(), r = $('repo').value.trim(), b = $('branch').value.trim() || 'main';
+    var t = $('pat').value.trim();
+    if (!o || !r || !b) { note('Fill owner / repo / branch first.', false); return null; }
+    return { o: o, r: r, b: b, t: t };
+  }
+  function b64decode(s) {
+    var bin = atob(s.replace(/\s/g, ''));
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  function b64encode(s) {
+    var bytes = new TextEncoder().encode(s);
+    var bin = '';
+    bytes.forEach(function (x) { bin += String.fromCharCode(x); });
+    return btoa(bin);
+  }
+  function setDirty(v) { dirty = v; setBadge(); }
+
+  /* ---------- members model ---------- */
+  function buildRows() {
+    var map = {};
+    function ensure(kind, id) { var k = kind + '::' + String(id); if (!map[k]) map[k] = { kind: kind, id: String(id), reason: '', meta: '', flags: {} }; return map[k]; }
+    (state.bans || []).forEach(function (b) {
+      var id = (b && (b.id || b)) || '';
+      if (!id) return;
+      var r = ensure('discord', id);
+      r.banned = true; r.reason = (b && b.reason) || r.reason || ''; r.meta = ((b && b.by) || '') + ((b && b.at) ? ' / ' + b.at : '');
+    });
+    (state.whitelist || []).forEach(function (w) {
+      var id = ((w && (w.id || w)) || '').toString();
+      if (!id) return;
+      var r = ensure('discord', id);
+      r.whitelisted = true;
+    });
+    (state.hwid_bans || []).forEach(function (h) {
+      var id = String(h || '').trim();
+      if (!id) return;
+      var r = ensure('hwid', id);
+      r.hwidbanned = true;
+    });
+    var rows = Object.keys(map).map(function (k) { return map[k]; });
+    rows.sort(function (a, b) { return String(a.id).localeCompare(String(b.id)); });
+    return rows;
+  }
+  function chip(r) {
+    var out = '';
+    if (r.kind === 'hwid') out += '<span class="chip hw">HWID</span> ';
+    if (r.hwidbanned) out += '<span class="chip hw">HWID BANNED</span> ';
+    if (r.banned) out += '<span class="chip ban">BANNED</span> ';
+    if (r.whitelisted) out += '<span class="chip wl">WHITELISTED</span> ';
+    if (!out) out = '<span style="color:#64748b">normal</span>';
+    return out;
+  }
+
+  function render() {
+    if (!dirty) {
+      $('f_message').value = state.message || '';
+      $('f_maint').checked = !!state.maintenance;
+      $('f_owners').value = (state.owners && state.owners.length ? state.owners : CONFIG.owners).join('\n');
+    }
+    var rows = buildRows();
+    var search = ($('search').value || '').toLowerCase();
+    var tb = $('rows');
+    tb.innerHTML = '';
+    var shown = 0;
+    rows.forEach(function (r) {
+      var hay = (r.id + ' ' + (r.reason || '')).toLowerCase();
+      if (search && hay.indexOf(search) === -1) return;
+      shown++;
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + (r.kind === 'hwid' ? '<span style="color:#94a3b8">HW:</span> ' : '') + esc(r.id) +
+        (r.meta ? '<br><span style="color:#64748b;font-size:10px">' + esc(r.meta) + '</span>' : '') +
+        '</td><td>' + chip(r) + '</td><td>' + esc(r.reason || '') + '</td><td class="actions"></td>';
+      var acts = tr.lastChild;
+      function btn(label, cls, fn) {
+        var b = document.createElement('button');
+        b.className = 'small ' + (cls || '');
+        b.textContent = label;
+        b.onclick = fn;
+        acts.appendChild(b);
+      }
+      if (r.kind === 'discord') {
+        if (!r.banned) btn('🚫 BAN', 'bred', function () {
+          var why = prompt('Reason for banning ' + r.id + '?', '');
+          if (why === null) return;
+          pushBan(r.id, why); render();
+        });
+        else btn('✅ UNBAN', 'bgreen', function () { removeBan(r.id); render(); });
+        if (!r.whitelisted) btn('🤍 WHITELIST', '', function () { addWl(r.id); render(); });
+        else btn('➖ UN-WL', 'ghost', function () { removeWl(r.id); render(); });
+      } else if (r.kind === 'hwid') {
+        btn('✅ UNBAN PC', 'bgreen', function () { removeHw(r.id); render(); });
+      }
+      tb.appendChild(tr);
+    });
+    $('memberCount').textContent = rows.length + ' members' + (search ? ' (' + shown + ' shown)' : '');
+    $('sBans').textContent = (state.bans || []).length;
+    $('sHw').textContent = (state.hwid_bans || []).length;
+    $('sWl').textContent = (state.whitelist || []).length;
+    $('sTotal').textContent = rows.length;
+    $('lastSha').textContent = fileSha ? String(fileSha).substring(0, 7) : '—';
+  }
+
+  /* ---------- mutations ---------- */
+  function pushBan(id, reason) {
+    id = String(id).trim(); if (!id) return;
+    state.bans = state.bans || [];
+    if (!state.bans.some(function (b) { return String((b && (b.id || b)) || '') === id; }))
+      state.bans.push({ id: id, reason: reason || '', by: myUid || 'dashboard', at: new Date().toISOString().substring(0, 10) });
+    removeWl(id, true);
+    setDirty(true);
+  }
+  function removeBan(id) {
+    id = String(id).trim();
+    state.bans = (state.bans || []).filter(function (b) { return String((b && (b.id || b)) || '') !== id; });
+    setDirty(true);
+  }
+  function addWl(id) {
+    id = String(id).trim(); if (!id) return;
+    state.whitelist = state.whitelist || [];
+    if (!state.whitelist.some(function (w) { return String((w && (w.id || w)) || '') === id; })) state.whitelist.push(id);
+    setDirty(true);
+  }
+  function removeWl(id, silent) {
+    id = String(id).trim();
+    state.whitelist = (state.whitelist || []).filter(function (w) { return String((w && (w.id || w)) || '') !== id; });
+    if (!silent) setDirty(true);
+  }
+  function addHw(h) {
+    h = String(h || '').trim().toLowerCase(); if (!h) return;
+    state.hwid_bans = state.hwid_bans || [];
+    if (!state.hwid_bans.some(function (x) { return String(x).toLowerCase() === h; })) state.hwid_bans.push(h);
+    setDirty(true);
+  }
+  function removeHw(h) {
+    h = String(h || '').trim();
+    state.hwid_bans = (state.hwid_bans || []).filter(function (x) { return String(x) !== h; });
+    setDirty(true);
+  }
+
+  /* ---------- load / save ---------- */
+  $('btnLoad').onclick = load;
+  async function load() {
+    var c = api(); if (!c) { note('LOGGED OWNER verified, but PAT (repo token) required to read bans.json', false); return; }
+    note('Loading from GitHub...', true);
+    try {
+      var r = await fetch('https://api.github.com/repos/' + c.o + '/' + c.r + '/contents/bans.json?ref=' + encodeURIComponent(c.b), {
+        headers: c.t ? { Authorization: 'Bearer ' + c.t, Accept: 'application/vnd.github+json' } : { Accept: 'application/vnd.github+json' }
+      });
+      if (r.status === 404) {
+        fileSha = null;
+        state = { message: '', maintenance: false, owners: state.owners || [], whitelist: [], bans: [], hwid_bans: [] };
+        render(); note('No bans.json yet — add members and SAVE to create it. (owners stay fine)', true); setDirty(false); return;
+      }
+      if (!r.ok) throw new Error('GitHub error ' + r.status);
+      var j = await r.json();
+      fileSha = j.sha || null;
+      var data = JSON.parse(b64decode(j.content || '{}'));
+      state = {
+        message: data.message || '',
+        maintenance: !!data.maintenance,
+        owners: Array.isArray(data.owners) ? data.owners.map(String) : [],
+        whitelist: Array.isArray(data.whitelist) ? data.whitelist : [],
+        bans: Array.isArray(data.bans) ? data.bans : [],
+        hwid_bans: Array.isArray(data.hwid_bans) ? data.hwid_bans : []
+      };
+      render(); setDirty(false); setStatus('OWNER · LIVE', 'owner');
+      note('Loaded. sha ' + String(fileSha || '').substring(0, 7) + '. Publish → all launchers in ~45s.', true);
+    } catch (e) { note('Load failed: ' + (e && e.message || e), false); }
+  }
+
+  $('btnSave').onclick = save;
+  async function save() {
+    var c = api();
+    if (!c.t) { note('Enter the GitHub PAT to publish. (Owner check works without it.)', false); return; }
+    collectGlobal();
+    note('Saving to GitHub...', true);
+    try {
+      var body = { message: 'Alsa dashboard: update members', content: b64encode(JSON.stringify(state, null, 2)), branch: c.b };
+      if (fileSha) body.sha = fileSha;
+      var r = await fetch('https://api.github.com/repos/' + c.o + '/' + c.r + '/contents/bans.json', {
+        method: 'PUT',
+        headers: { Authorization: 'Bearer ' + c.t, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (r.status === 409) throw new Error('sha conflict — reload first (another owner saved)');
+      if (!r.ok) throw new Error('GitHub error ' + r.status);
+      var j = await r.json();
+      fileSha = (j.content && j.content.sha) || fileSha;
+      setDirty(false); setStatus('OWNER · LIVE', 'owner');
+      note('Published ✓ sha ' + String(fileSha || '').substring(0, 7) + ' — launchers enforce it within ~45s.', true);
+    } catch (e) { note('Save failed: ' + (e && e.message || e) + ' — LOAD to refresh sha, then retry.', false); }
+  }
+
+  function collectGlobal() {
+    state.message = $('f_message').value;
+    state.maintenance = $('f_maint').checked;
+    state.owners = $('f_owners').value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+  $('f_message').addEventListener('input', function () { setDirty(true); });
+  $('f_maint').addEventListener('change', function () { setDirty(true); });
+  $('f_owners').addEventListener('input', function () { setDirty(true); });
+  $('search').addEventListener('input', render);
+
+  /* ---------- add buttons ---------- */
+  $('btnAddBan').onclick = function () {
+    var id = $('n_id').value.trim();
+    if (!/^\d{5,25}$/.test(id)) { note('Discord ID must be numeric (Discord → right click user → Copy ID).', false); return; }
+    pushBan(id, $('n_reason').value.trim());
+    $('n_id').value = ''; $('n_reason').value = '';
+    note('Ban staged. SAVE & PUBLISH → launchers see it in ~45s.', true); render();
+  };
+  $('btnAddWl').onclick = function () {
+    var id = $('n_id').value.trim();
+    if (!/^\d{5,25}$/.test(id)) { note('Discord ID must be numeric.', false); return; }
+    addWl(id); $('n_id').value = ''; $('n_reason').value = '';
+    note('Whitelist staged. SAVE & PUBLISH to apply.', true); render();
+  };
+  $('btnAddHw').onclick = function () {
+    var hw = $('n_hwid').value.trim();
+    if (!hw) { note('Enter an HWID to HWID-ban this PC.', false); return; }
+    addHw(hw);
+    var id = $('n_id').value.trim();
+    if (/^\d{5,25}$/.test(id)) pushBan(id, $('n_reason').value.trim() || 'HWID banned');
+    $('n_id').value = ''; $('n_hwid').value = ''; $('n_reason').value = '';
+    note('HWID ban staged. SAVE & PUBLISH — blocks that PC everywhere.', true); render();
+  };
+
+  /* ---------- batch ---------- */
+  function batchIds() {
+    return $('batchIn').value.split('\n').map(function (s) { return s.trim(); }).filter(function (s) { return /^\d{5,25}$/.test(s); });
+  }
+  $('btnBatchBan').onclick = function () {
+    var ids = batchIds();
+    if (!ids.length && !$('batchIn').value.trim()) { note('Put one Discord ID per line first.', false); return; }
+    ids.forEach(function (id) { pushBan(id, 'batch'); });
+    $('batchIn').value = '';
+    note(ids.length + ' bans staged. SAVE & PUBLISH.', true); render();
+  };
+  $('btnBatchWl').onclick = function () {
+    var ids = batchIds();
+    if (!ids.length) { note('Put one Discord ID per line first.', false); return; }
+    ids.forEach(function (id) { addWl(id); });
+    $('batchIn').value = '';
+    note(ids.length + ' whitelists staged. SAVE & PUBLISH.', true); render();
+  };
+  $('btnBatchHw').onclick = function () {
+    var lines = $('batchIn').value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!lines.length) { note('Put one HWID per line first.', false); return; }
+    lines.forEach(function (h) { addHw(h); });
+    $('batchIn').value = '';
+    note(lines.length + ' HWID bans staged. SAVE & PUBLISH.', true); render();
+  };
+
+  /* ---------- restore PAT + auto-refresh ---------- */
+  try { if (localStorage.getItem('alsa_dash_pat')) $('pat').value = localStorage.getItem('alsa_dash_pat'); } catch (_) {}
+  setInterval(function () {
+    if (!unlocked) return;
+    if (dirty) { setStatus('UNSAVED CHANGES', 'dirty'); return; }
+    load();
+  }, 20000);
+
+  render();
+})();
+</script>
+</body>
+</html>
