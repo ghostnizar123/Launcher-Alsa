@@ -181,6 +181,8 @@
   <div class="card">
     <h2>6 — LIVE Launchers <span class="hint" id="liveCount">—</span></h2>
     <div class="sub">Launchers ping the InfinityFree API every 15s — anyone who ran the launcher appears here automatically. Online = pinged in the last 45s.</div>
+    <div class="sub" id="liveErr" style="display:none; color:#f87171"></div>
+    <div style="margin-top:8px"><button id="btnConnectHost" class="ghost" style="display:none">🔓 CONNECT HOSTING (one click, then auto-refresh)</button></div>
     <div style="overflow-x:auto; margin-top:10px">
       <table>
         <thead><tr><th>Name</th><th>Discord ID</th><th>HWID</th><th>Ver</th><th>Last ping</th><th>Status</th><th style="width:18%">Actions</th></tr></thead>
@@ -621,7 +623,28 @@
   // InfinityFree serves a JS "anti-bot" challenge page to automated clients.
   // A hidden iframe is a real browser navigation, so the challenge runs itself
   // and stores the __test cookie; our fetch (credentials: 'include') reuses it.
-  var livePrime; var liveT = 0;
+  var livePrime; var liveT = 0; var liveFails = 0;
+  function sameOrigin() {
+    try {
+      var b = apiBase(); if (!b) return true;
+      var a = document.createElement('a'); a.href = b;
+      return a.hostname === location.hostname;
+    } catch (_) { return false; }
+  }
+  function liveError(t) {
+    var e = $('liveErr'); if (!e) return;
+    if (!t) { e.style.display = 'none'; e.textContent = ''; }
+    else { e.style.display = ''; e.textContent = t; }
+    var btn = $('btnConnectHost');
+    if (btn) btn.style.display = t ? '' : 'none';
+  }
+  $('btnConnectHost').onclick = function () {
+    // First-party visit solves InfinityFree's challenge, then members load.
+    var base = apiBase(); if (!base) return;
+    window.open(base + (base.indexOf('?') >= 0 ? '&' : '?') + 'action=members', '_blank', 'noopener');
+    liveError('');
+    note('Hosting opened in a new tab — solve it there (if asked), come back, list refreshes in ~15s.', true);
+  };
   function primeLive() {
     var base = apiBase();
     if (!base) return;
@@ -639,9 +662,19 @@
     if (++liveT % 12 === 0) { primeLive(); liveT = 0; }
     var url = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'action=members';
     fetch(url, { cache: 'no-store', credentials: 'include' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (list) { if (Array.isArray(list)) renderLive(list); })
-      .catch(function () {});
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
+      .then(function (list) {
+        if (!Array.isArray(list)) return Promise.reject(new Error('bad response'));
+        liveFails = 0; liveError('');
+        renderLive(list);
+      })
+      .catch(function () {
+        liveFails++;
+        if (liveFails >= 2) {
+          if (sameOrigin()) liveError('Hosting challenge not solved yet — click CONNECT HOSTING above, then wait ~15s.');
+          else liveError('Cross-origin hosting is blocked by the browser — open the dashboard ON your hosting instead (same URL as the API, /dashboard.html), or click CONNECT HOSTING.');
+        }
+      });
   }
   function liveDot(m) {
     return m && m.online ? '<span class="chip wl">● ONLINE</span>' : '<span class="chip hw">● OFFLINE</span>';
