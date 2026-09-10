@@ -1,7 +1,7 @@
 {
   "message": "Welcome",
   "maintenance": false,
-  "api": "https://alsaluancher.ct.ws/api/",
+  "api": "https://alsaluancher.ct.ws/api.php",
   "owners": [
     "1508465645262606560"
   ],
