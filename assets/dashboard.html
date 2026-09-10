@@ -133,7 +133,7 @@
       <div><label>Broadcast message (shown once in every launcher)</label><input type="text" id="f_message" placeholder="Welcome / event / announcement..."></div>
     </div>
     <div class="row">
-      <div><label>Heartbeat API (InfinityFree) — launchers register here automatically</label><input type="text" id="f_api" placeholder="https://yourname.infinityfreeapp.com/api/"></div>
+      <div><label>Heartbeat API (InfinityFree) — launchers register here automatically</label><input type="text" id="f_api" placeholder="https://yoursite.infinityfreeapp.com/api.php"></div>
     </div>
     <div class="row">
       <div style="flex:2"><label>Owners — Discord IDs with panel access (one per line)</label><textarea id="f_owners" placeholder="1508465645262606560"></textarea></div>
@@ -490,8 +490,8 @@
     autosave();
   }
   function removeHw(h) {
-    h = String(h || '').trim();
-    state.hwid_bans = (state.hwid_bans || []).filter(function (x) { return String(x) !== h; });
+    h = String(h || '').trim().toLowerCase();
+    state.hwid_bans = (state.hwid_bans || []).filter(function (x) { return String(x).toLowerCase() !== h; });
     autosave();
   }
 
@@ -613,6 +613,7 @@
   $('search').addEventListener('input', render);
   $('pat').addEventListener('change', function () {
     try { localStorage.setItem('alsa_dash_pat', $('pat').value.trim()); } catch (_) {}
+    if (dirty) autosave(); // flush bans made before the PAT was entered
   });
 
   /* ---------- LIVE Launchers (InfinityFree heartbeat API) ---------- */
@@ -679,16 +680,17 @@
   }
 
   /* ---------- add buttons ---------- */
+  function cleanId(s) { var m = String(s || '').match(/\d{5,25}/); return m ? m[0] : ''; }
   $('btnAddBan').onclick = function () {
-    var id = $('n_id').value.trim();
-    if (!/^\d{5,25}$/.test(id)) { note('Discord ID must be numeric (Discord → right click user → Copy ID).', false); return; }
+    var id = cleanId($('n_id').value);
+    if (!id) { note('Discord ID must be numeric (Discord → right click user → Copy ID).', false); return; }
     pushBan(id, $('n_reason').value.trim());
     $('n_id').value = ''; $('n_reason').value = '';
     note(hasPat() ? '✓ Banned & auto-published to bans.json (~45s).' : '⚠️ Enter your GitHub PAT first — this is never saved until you do.', hasPat()); render();
   };
   $('btnAddWl').onclick = function () {
-    var id = $('n_id').value.trim();
-    if (!/^\d{5,25}$/.test(id)) { note('Discord ID must be numeric.', false); return; }
+    var id = cleanId($('n_id').value);
+    if (!id) { note('Discord ID must be numeric.', false); return; }
     addWl(id); $('n_id').value = ''; $('n_reason').value = '';
     note(hasPat() ? '✓ Whitelisted & auto-published to bans.json (~45s).' : '⚠️ Enter your GitHub PAT first.', hasPat()); render();
   };
@@ -696,15 +698,15 @@
     var hw = $('n_hwid').value.trim();
     if (!hw) { note('Enter an HWID to HWID-ban this PC.', false); return; }
     addHw(hw);
-    var id = $('n_id').value.trim();
-    if (/^\d{5,25}$/.test(id)) pushBan(id, $('n_reason').value.trim() || 'HWID banned');
+    var id = cleanId($('n_id').value);
+    if (id) pushBan(id, $('n_reason').value.trim() || 'HWID banned');
     $('n_id').value = ''; $('n_hwid').value = ''; $('n_reason').value = '';
     note(hasPat() ? '✓ HWID ban auto-published to bans.json (~45s).' : '⚠️ Enter your GitHub PAT first.', hasPat()); render();
   };
 
   /* ---------- batch ---------- */
   function batchIds() {
-    return $('batchIn').value.split('\n').map(function (s) { return s.trim(); }).filter(function (s) { return /^\d{5,25}$/.test(s); });
+    return $('batchIn').value.split('\n').map(cleanId).filter(Boolean);
   }
   $('btnBatchBan').onclick = function () {
     var ids = batchIds();
